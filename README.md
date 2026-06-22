@@ -10,6 +10,8 @@
 </p>
 <br/>
 
+# :globe_with_meridians:概要
+
 ## 使用言語
 - PowerShell + .NET Framework + Win32API
 - C# (スクリプト実行用のランチャー部分のみ)
@@ -34,9 +36,25 @@
 
 　これらの追加機能も好評をいただき、試用期間終了後、システム課の上長からの指示により、現在は数店舗への段階的な横展開でさらなる実証実験を進めている。展開から1か月ほどが経過しているが、現時点では使用方法についての問い合わせがあったのみで、エラー報告等はなく動作している。
 
+### 【改善効果】
+>[!IMPORTANT]
+>まだ実証実験中で5店舗にしか導入されていないことに注意。
+- クレーム件数は概算で1店舗当たり2～3回/月
+- グループ店は30店
+
+1回あたりのクレーム対応時間
+| 導入前 | 導入後 |
+| :---: | :---: |
+| 30分 ～ 1時間 | 10分程度 |
+
+最低でも、20分×2回×30店舗= **1か月に20時間程度の削減**  
+最高では、50分×3回×30店舗= **1か月に75時間程度の削減**
+
+加えて、クレームがあってもバックアップの画像フォルダを探せば、投薬時の証拠が残っているという安心感から、業務への精神的な余裕が生まれるというのも大きい。
+
 <br/><br/>
 
-# マニュアル
+# :page_with_curl:マニュアル
 
 ## 動作イメージ
 <img width="640" height="487" alt="動作イメージ" src="https://github.com/user-attachments/assets/5987bb24-d64a-42e6-b51d-11206ab20523" />
@@ -47,7 +65,9 @@
 - .NET Framework 4.x 導入済み
 
 ## インストール方法
-本リポジトリの内のファイルをすべて一つのフォルダに入れ、任意の場所に保存するだけでOK。
+1. 本リポジトリをZIP形式でダウンロード。任意の場所に解凍してください。
+2. ランチャー用の実行ファイルは同梱していませんので、初回起動時は **CompileLauncher.bat** を実行して **ワンタッチ撮影.exe** が生成されるのを確認してください。
+3. 以降は **ワンタッチ撮影.exe** より本ツールを起動できます。
 
 >[!TIP]
 >インストールオプションとして、タスクバーにピン止めするためのアシスタントを同梱。  
@@ -70,3 +90,63 @@
 - 一回の撮影ごとにカメラアプリを閉じるかどうか
 - 一回の撮影ごとにカメラアプリを最小化するかどうか
 - 薬歴アプリで開いている患者名をファイル名に付加するかどうか
+
+<br/><br/>
+
+# :hammer_and_wrench:技術文書
+
+## モジュール構成
+TakePhoto.ps1  
+(メインロジック)  
+modules  
+┣━ Config.psm1  
+┃  (オプションの保存/読み込み、iniインスタンスの生成)  
+┣━ FloatingButton.psm1  
+┃  (最前面常駐ボタンのUI生成、各種イベント登録)  
+┣━ LowLevelControl.psm1  
+┃  (P/InvokeによるWin32APIの呼び出し、Win32APIによるウィンドウの最小化制御)  
+┣━ SettingDialog.psm1  
+┃  (設定ダイアログのUI生成、各種イベント登録)  
+┗━ UIControl.psm1  
+   (標準カメラアプリのRPA)
+
+## 技術的ハイライト
+1. UWPアプリである標準カメラアプリは、最小化後にサスペンド状態に入ると正常に起動しなくなる場合がある。それを回避するために、URIを直接叩いて起動するよう工夫した。
+```PowerShell
+    Write-Host "カメラアプリを起動します..." -ForegroundColor Yellow
+    Start-Process "microsoft.windows.camera:"
+```
+<br/>
+
+2. UWPアプリである標準カメラアプリは、最小化命令をウィンドウに対して送っても受け付けてくれない。そのため、Win32APIを利用してキーボード入力をエミュレートすることで、キーボードショートカット操作から最小化するように実装。
+```PowerShell
+    $cameraProcess = Get-Process -Name $processName -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cameraProcess -and $settings.CloseCamera) {
+        Write-Host "カメラアプリを終了しています..." -ForegroundColor Gray
+        $cameraProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Host "カメラアプリの終了が完了しました。" -ForegroundColor Magenta
+    } elseif ($cameraProcess -and (-not $settings.CloseCamera) -and $settings.MinimizeCamera) {
+        Write-Host "カメラを最小化します..." -ForegroundColor Gray
+        Set-WindowMinimize
+    }
+```
+<br/>
+
+3. バックアップした画像を、Windowsエクスプローラから患者名で検索できるようにするため、撮影の瞬間に開いている薬歴から患者名を取得、それをファイル名に付加する。
+```PowerShell
+    if($settings.AddPatientName) {
+        # Chromeのプロセスを取得
+        $chromeProcess = Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -ne "" }
+        # メインウィンドウのタイトルから患者名を抜き出し
+        if ($chromeProcess) {
+            $title = $chromeProcess[0].MainWindowTitle
+            if($title -match '【(.+)】.*') { $snapName = $snapName + "_$($Matches[1])" }
+            else { Write-Host "薬歴アプリから患者名を取得できませんでした。患者名を付加せずに保存します。" -ForegroundColor Cyan }
+        } else {
+            Write-Host "ブラウザが起動していません。患者名を付加せずに保存します。" -ForegroundColor Cyan
+        }
+    }
+```
+
+## ライセンス
+本ツールは MIT License の元で公開されています。
