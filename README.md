@@ -10,6 +10,9 @@
 </p>
 <br/>
 
+## 動作イメージ
+<img width="640" height="487" alt="動作イメージ" src="https://github.com/user-attachments/assets/5987bb24-d64a-42e6-b51d-11206ab20523" />
+
 # :globe_with_meridians:概要
 
 ## 使用言語
@@ -55,9 +58,6 @@
 <br/><br/>
 
 # :page_with_curl:マニュアル
-
-## 動作イメージ
-<img width="640" height="487" alt="動作イメージ" src="https://github.com/user-attachments/assets/5987bb24-d64a-42e6-b51d-11206ab20523" />
 
 ## 確認済み動作環境
 - Windows 10/11
